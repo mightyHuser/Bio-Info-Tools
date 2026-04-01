@@ -13,7 +13,8 @@ export default async function ViewerPage({
   if (!session) redirect('/api/auth/signin')
 
   const { id } = await params
-  const accessToken = (session as any).accessToken as string
+  const accessToken = (session as any).accessToken as string | undefined
+  if (!accessToken) redirect('/api/auth/signin')
   const files = await listPdfFiles(accessToken)
   const file = files.find((f) => f.id === id)
 

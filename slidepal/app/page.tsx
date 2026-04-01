@@ -8,7 +8,9 @@ export default async function HomePage() {
   const session = await getServerSession(authOptions)
   if (!session) redirect('/api/auth/signin')
 
-  const accessToken = (session as any).accessToken as string
+  const accessToken = (session as any).accessToken as string | undefined
+  if (!accessToken) redirect('/api/auth/signin')
+
   const files = await listPdfFiles(accessToken)
 
   return (

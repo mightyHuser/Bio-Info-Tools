@@ -12,7 +12,8 @@ export async function GET(
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params
-  const accessToken = (session as any).accessToken as string
+  const accessToken = (session as any).accessToken as string | undefined
+  if (!accessToken) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const stream = await getPdfStream(accessToken, id)
 
   const readable = stream as unknown as Readable
