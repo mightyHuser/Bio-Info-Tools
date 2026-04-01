@@ -1,0 +1,17 @@
+[
+  {
+    "name": "SeqHunter",
+    "icon": "🔍",
+    "desc": "NCBI/DDBJ からサンプルを検索・ダウンロード",
+    "type": "gui",
+    "cmd": "seq_hunter_gui.py"
+  },
+  {
+    "name": "SlidePal",
+    "icon": "📑",
+    "desc": "発表PDF閲覧支援・用語データベース",
+    "type": "web",
+    "cmd": "slidepal",
+    "port": 3000
+  }
+]
