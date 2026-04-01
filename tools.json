@@ -4,7 +4,8 @@
     "icon": "🔍",
     "desc": "NCBI/DDBJ からサンプルを検索・ダウンロード",
     "type": "gui",
-    "cmd": "seq_hunter_gui.py"
+    "cmd": "seq_hunter_gui.py",
+    "version": "1.0.0"
   },
   {
     "name": "SlidePal",
@@ -12,6 +13,7 @@
     "desc": "発表PDF閲覧支援・用語データベース",
     "type": "web",
     "cmd": "slidepal",
-    "port": 3000
+    "port": 3001,
+    "version": "1.0.0"
   }
 ]

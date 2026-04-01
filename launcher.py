@@ -68,9 +68,11 @@ class App(ctk.CTk):
             font=ctk.CTkFont(weight="bold"),
             anchor="w",
         ).pack(anchor="w")
+        version = tool.get("version", "")
+        desc_ver = f"{tool['desc']}  •  v{version}" if version else tool["desc"]
         ctk.CTkLabel(
             left,
-            text=tool["desc"],
+            text=desc_ver,
             text_color="gray",
             font=ctk.CTkFont(size=11),
             anchor="w",
