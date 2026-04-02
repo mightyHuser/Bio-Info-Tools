@@ -71,103 +71,107 @@ class SearchPanel(ctk.CTkFrame):
         self._build()
 
     def _build(self):
+        # スクロール可能な内側フレーム
+        self._inner = ctk.CTkScrollableFrame(self, fg_color="transparent", corner_radius=0)
+        self._inner.pack(fill="both", expand=True)
+        inner = self._inner
         pad = {"padx": 12, "pady": 4}
 
         # タイトル
-        ctk.CTkLabel(self, text="🔬 検索条件",
+        ctk.CTkLabel(inner, text="🔬 検索条件",
                      font=ctk.CTkFont(size=16, weight="bold"),
                      text_color=COLOR_BLUE).pack(anchor="w", padx=14, pady=(14, 6))
 
-        self._sep()
+        self._sep(inner)
 
         # DB
-        self._label("データベース")
+        self._label(inner, "データベース")
         self.db_var = ctk.StringVar(value="両方 (NCBI + DDBJ)")
-        ctk.CTkOptionMenu(self, values=["NCBI SRA", "DDBJ", "両方 (NCBI + DDBJ)"],
+        ctk.CTkOptionMenu(inner, values=["NCBI SRA", "DDBJ", "両方 (NCBI + DDBJ)"],
                           variable=self.db_var,
                           fg_color=COLOR_ACCENT, button_color=COLOR_BLUE).pack(fill="x", **pad)
 
         # 採取環境
-        self._label("採取環境")
+        self._label(inner, "採取環境")
         self.env_var = ctk.StringVar(value="hot spring / 温泉")
-        ctk.CTkOptionMenu(self, values=list(ENV_KEYWORDS.keys()),
+        ctk.CTkOptionMenu(inner, values=list(ENV_KEYWORDS.keys()),
                           variable=self.env_var,
                           fg_color=COLOR_ACCENT, button_color=COLOR_BLUE).pack(fill="x", **pad)
 
         # フォーマット
-        self._label("シーケンスフォーマット")
+        self._label(inner, "シーケンスフォーマット")
         self.fmt_var = ctk.StringVar(value="16S rRNA")
-        ctk.CTkOptionMenu(self, values=list(FORMAT_KEYWORDS.keys()),
+        ctk.CTkOptionMenu(inner, values=list(FORMAT_KEYWORDS.keys()),
                           variable=self.fmt_var,
                           fg_color=COLOR_ACCENT, button_color=COLOR_BLUE).pack(fill="x", **pad)
 
         # シーケンサー
-        self._label("シーケンス機器")
+        self._label(inner, "シーケンス機器")
         self.seq_var = ctk.StringVar(value="指定なし")
-        ctk.CTkOptionMenu(self, values=list(SEQ_METHOD_KEYWORDS.keys()),
+        ctk.CTkOptionMenu(inner, values=list(SEQ_METHOD_KEYWORDS.keys()),
                           variable=self.seq_var,
                           fg_color=COLOR_ACCENT, button_color=COLOR_BLUE).pack(fill="x", **pad)
 
         # 国・地域
-        self._label("採取国・地域 (任意)")
-        self.country_entry = ctk.CTkEntry(self, placeholder_text="例: Japan",
+        self._label(inner, "採取国・地域 (任意)")
+        self.country_entry = ctk.CTkEntry(inner, placeholder_text="例: Japan",
                                           fg_color=COLOR_ACCENT)
         self.country_entry.pack(fill="x", **pad)
 
         # 追加キーワード
-        self._label("追加キーワード (任意)")
-        self.extra_entry = ctk.CTkEntry(self, placeholder_text="例: volcanic",
+        self._label(inner, "追加キーワード (任意)")
+        self.extra_entry = ctk.CTkEntry(inner, placeholder_text="例: volcanic",
                                         fg_color=COLOR_ACCENT)
         self.extra_entry.pack(fill="x", **pad)
 
         # カスタム自由入力欄（その他が選ばれたとき）
-        self._label("カスタム環境/フォーマット (その他の場合)")
-        self.custom_entry = ctk.CTkEntry(self, placeholder_text="例: cave, glacier, ITS2",
+        self._label(inner, "カスタム環境/フォーマット (その他の場合)")
+        self.custom_entry = ctk.CTkEntry(inner, placeholder_text="例: cave, glacier, ITS2",
                                          fg_color=COLOR_ACCENT)
         self.custom_entry.pack(fill="x", **pad)
 
-        self._sep()
+        self._sep(inner)
 
         # 件数
-        self._label("最大取得件数")
+        self._label(inner, "最大取得件数")
         self.limit_var = ctk.StringVar(value="50")
-        ctk.CTkEntry(self, textvariable=self.limit_var,
+        ctk.CTkEntry(inner, textvariable=self.limit_var,
                      fg_color=COLOR_ACCENT).pack(fill="x", **pad)
 
         # メールアドレス
-        self._label("NCBIメールアドレス")
-        self.email_entry = ctk.CTkEntry(self, placeholder_text="your@email.com",
+        self._label(inner, "NCBIメールアドレス")
+        self.email_entry = ctk.CTkEntry(inner, placeholder_text="your@email.com",
                                         fg_color=COLOR_ACCENT)
         self.email_entry.pack(fill="x", **pad)
 
-        self._sep()
+        self._sep(inner)
 
         # 検索ボタン
         self.search_btn = ctk.CTkButton(
-            self, text="🔍  検索実行", height=40,
+            inner, text="🔍  検索実行", height=40,
             fg_color=COLOR_BLUE, hover_color="#1a7de0",
             font=ctk.CTkFont(size=14, weight="bold"),
             command=self._on_click_search,
         )
         self.search_btn.pack(fill="x", padx=12, pady=(8, 4))
 
-        self._sep()
+        self._sep(inner)
 
         # ── アクセッション番号直接検索 ──────────────────────
-        ctk.CTkLabel(self, text="🔎 アクセッション番号で検索",
+        ctk.CTkLabel(inner, text="🔎 アクセッション番号で検索",
                      font=ctk.CTkFont(size=13, weight="bold"),
                      text_color=COLOR_YELLOW).pack(anchor="w", padx=14, pady=(4, 2))
 
-        self._label("アクセッション番号 (カンマ区切り)")
+        self._label(inner, "アクセッション番号 (カンマ区切り)")
         self.accession_entry = ctk.CTkEntry(
-            self,
+            inner,
             placeholder_text="例: SRR12345, DRR67890, SRP001234",
             fg_color=COLOR_ACCENT,
         )
         self.accession_entry.pack(fill="x", padx=12, pady=4)
 
         self.acc_search_btn = ctk.CTkButton(
-            self, text="🔍  アクセッション検索", height=36,
+            inner, text="🔍  アクセッション検索", height=36,
             fg_color=COLOR_YELLOW, hover_color="#e0b800",
             text_color="#1a1a2e",
             font=ctk.CTkFont(size=13, weight="bold"),
@@ -175,12 +179,12 @@ class SearchPanel(ctk.CTkFrame):
         )
         self.acc_search_btn.pack(fill="x", padx=12, pady=(2, 12))
 
-    def _label(self, text):
-        ctk.CTkLabel(self, text=text, font=ctk.CTkFont(size=11),
+    def _label(self, parent, text):
+        ctk.CTkLabel(parent, text=text, font=ctk.CTkFont(size=11),
                      text_color=COLOR_DIM).pack(anchor="w", padx=14, pady=(6, 0))
 
-    def _sep(self):
-        ctk.CTkFrame(self, height=1, fg_color=COLOR_ACCENT).pack(fill="x", padx=10, pady=6)
+    def _sep(self, parent):
+        ctk.CTkFrame(parent, height=1, fg_color=COLOR_ACCENT).pack(fill="x", padx=10, pady=6)
 
     def _on_click_search(self):
         params = self.get_params()
