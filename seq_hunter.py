@@ -186,6 +186,80 @@ def search_ncbi_sra(query: str, limit: int, email: str) -> list:
 
 
 # ─────────────────────────────────────────────────────────
+# アクセッション番号直接フェッチ
+# ─────────────────────────────────────────────────────────
+
+def fetch_by_accessions(accessions: list, email: str) -> list:
+    """SRR/DRR/ERR/SRP/DRP などのアクセッション番号からメタデータを取得する。
+
+    Run accession (SRR/DRR/ERR) と Study accession (SRP/DRP/ERP) の両方に対応。
+    """
+    Entrez.email = email
+    results = []
+
+    with console.status("[bold cyan]アクセッション番号を検索中...", spinner="dots"):
+        for acc in accessions:
+            acc = acc.strip()
+            if not acc:
+                continue
+            try:
+                handle = Entrez.esearch(db="sra", term=f"{acc}[Accession]", retmax=200)
+                record = Entrez.read(handle)
+                handle.close()
+
+                ids = record.get("IdList", [])
+                if not ids:
+                    console.print(f"[yellow]{acc}: 見つかりませんでした[/yellow]")
+                    continue
+
+                fetch_handle = Entrez.esummary(db="sra", id=",".join(ids), retmax=200)
+                summaries = Entrez.read(fetch_handle)
+                fetch_handle.close()
+
+                for s in summaries:
+                    exp_xml  = s.get("ExpXml", "")
+                    runs_xml = s.get("Runs", "")
+
+                    title    = re.search(r'<Study acc="([^"]+)"[^>]*name="([^"]+)"', exp_xml)
+                    platform = re.search(r'<Platform instrument_model="([^"]+)"', exp_xml)
+                    spots    = re.search(r'total_spots="(\d+)"', runs_xml)
+                    bases    = re.search(r'total_bases="(\d+)"', runs_xml)
+                    run_acc  = re.findall(r'acc="(SRR\d+|ERR\d+|DRR\d+)"', runs_xml)
+                    biosample = re.search(r'<Biosample>(\S+)</Biosample>', exp_xml)
+                    organism  = re.search(r'<Organism taxid="\d+" ScientificName="([^"]+)"', exp_xml)
+                    geo = (
+                        re.search(r'geo_loc_name[^>]*value="([^"]+)"', exp_xml) or
+                        re.search(r'geo_loc_name[^>]*>([^<]+)<', exp_xml) or
+                        re.search(r'<Tag>geo_loc_name</Tag>\s*<Value>([^<]+)</Value>', exp_xml)
+                    )
+                    source = (
+                        re.search(r'isolation_source[^>]*value="([^"]+)"', exp_xml) or
+                        re.search(r'isolation_source[^>]*>([^<]+)<', exp_xml) or
+                        re.search(r'<Tag>isolation_source</Tag>\s*<Value>([^<]+)</Value>', exp_xml)
+                    )
+
+                    results.append({
+                        "db": "NCBI",
+                        "study_acc": title.group(1) if title else acc,
+                        "title": (title.group(2) if title else s.get("Title", acc))[:80],
+                        "platform": platform.group(1) if platform else "N/A",
+                        "runs": run_acc if run_acc else [acc],
+                        "run_count": len(run_acc) if run_acc else 1,
+                        "spots": int(spots.group(1)) if spots else 0,
+                        "bases_gb": round(int(bases.group(1)) / 1e9, 2) if bases else 0,
+                        "organism": organism.group(1) if organism else "N/A",
+                        "geo_loc": geo.group(1).strip() if geo else "N/A",
+                        "isolation_source": source.group(1).strip() if source else "N/A",
+                        "biosample": biosample.group(1) if biosample else "N/A",
+                    })
+
+            except Exception as e:
+                console.print(f"[red]{acc} 取得エラー: {e}[/red]")
+
+    return results
+
+
+# ─────────────────────────────────────────────────────────
 # DDBJ 検索
 # ─────────────────────────────────────────────────────────
 

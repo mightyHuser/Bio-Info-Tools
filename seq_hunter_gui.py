@@ -35,6 +35,7 @@ from seq_hunter import (
     check_sra_toolkit,
     download_via_ebi_ftp,
     download_with_prefetch,
+    fetch_by_accessions,
     search_ddbj,
     search_ncbi_sra,
 )
@@ -150,6 +151,30 @@ class SearchPanel(ctk.CTkFrame):
         )
         self.search_btn.pack(fill="x", padx=12, pady=(8, 4))
 
+        self._sep()
+
+        # ── アクセッション番号直接検索 ──────────────────────
+        ctk.CTkLabel(self, text="🔎 アクセッション番号で検索",
+                     font=ctk.CTkFont(size=13, weight="bold"),
+                     text_color=COLOR_YELLOW).pack(anchor="w", padx=14, pady=(4, 2))
+
+        self._label("アクセッション番号 (カンマ区切り)")
+        self.accession_entry = ctk.CTkEntry(
+            self,
+            placeholder_text="例: SRR12345, DRR67890, SRP001234",
+            fg_color=COLOR_ACCENT,
+        )
+        self.accession_entry.pack(fill="x", padx=12, pady=4)
+
+        self.acc_search_btn = ctk.CTkButton(
+            self, text="🔍  アクセッション検索", height=36,
+            fg_color=COLOR_YELLOW, hover_color="#e0b800",
+            text_color="#1a1a2e",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            command=self._on_click_acc_search,
+        )
+        self.acc_search_btn.pack(fill="x", padx=12, pady=(2, 12))
+
     def _label(self, text):
         ctk.CTkLabel(self, text=text, font=ctk.CTkFont(size=11),
                      text_color=COLOR_DIM).pack(anchor="w", padx=14, pady=(6, 0))
@@ -160,6 +185,14 @@ class SearchPanel(ctk.CTkFrame):
     def _on_click_search(self):
         params = self.get_params()
         self.on_search(params)
+
+    def _on_click_acc_search(self):
+        raw = self.accession_entry.get().strip()
+        if not raw:
+            return
+        accessions = [a.strip() for a in raw.replace("、", ",").split(",") if a.strip()]
+        email = self.email_entry.get().strip() or "user@example.com"
+        self.on_search({"mode": "accession", "accessions": accessions, "email": email})
 
     def get_params(self) -> dict:
         env_key = self.env_var.get()
@@ -197,6 +230,10 @@ class SearchPanel(ctk.CTkFrame):
         self.search_btn.configure(
             state="disabled" if state else "normal",
             text="検索中..." if state else "🔍  検索実行",
+        )
+        self.acc_search_btn.configure(
+            state="disabled" if state else "normal",
+            text="検索中..." if state else "🔍  アクセッション検索",
         )
 
 
@@ -633,25 +670,35 @@ class SeqHunterApp(ctk.CTk):
         def worker():
             all_results = []
 
-            if params["db"] in ("NCBI SRA", "両方 (NCBI + DDBJ)"):
-                query = build_ncbi_query(
-                    params["env_terms"], params["fmt_terms"],
-                    params["country"], params["extra_query"]
-                )
+            if params.get("mode") == "accession":
+                # ── アクセッション番号直接検索 ──
                 try:
-                    ncbi = search_ncbi_sra(query, params["limit"], params["email"])
-                    all_results.extend(ncbi)
+                    all_results = fetch_by_accessions(
+                        params["accessions"], params["email"]
+                    )
                 except Exception as e:
-                    self.after(0, messagebox.showerror, "NCBI エラー", str(e))
+                    self.after(0, messagebox.showerror, "検索エラー", str(e))
+            else:
+                # ── キーワード検索 ──
+                if params["db"] in ("NCBI SRA", "両方 (NCBI + DDBJ)"):
+                    query = build_ncbi_query(
+                        params["env_terms"], params["fmt_terms"],
+                        params["country"], params["extra_query"]
+                    )
+                    try:
+                        ncbi = search_ncbi_sra(query, params["limit"], params["email"])
+                        all_results.extend(ncbi)
+                    except Exception as e:
+                        self.after(0, messagebox.showerror, "NCBI エラー", str(e))
 
-            if params["db"] in ("DDBJ", "両方 (NCBI + DDBJ)"):
-                ddbj_terms = (params["env_terms"] + params["fmt_terms"] +
-                              ([params["country"]] if params["country"] else []))
-                try:
-                    ddbj = search_ddbj(ddbj_terms, params["limit"])
-                    all_results.extend(ddbj)
-                except Exception as e:
-                    self.after(0, messagebox.showerror, "DDBJ エラー", str(e))
+                if params["db"] in ("DDBJ", "両方 (NCBI + DDBJ)"):
+                    ddbj_terms = (params["env_terms"] + params["fmt_terms"] +
+                                  ([params["country"]] if params["country"] else []))
+                    try:
+                        ddbj = search_ddbj(ddbj_terms, params["limit"])
+                        all_results.extend(ddbj)
+                    except Exception as e:
+                        self.after(0, messagebox.showerror, "DDBJ エラー", str(e))
 
             self.after(0, self.results_panel.load_results, all_results)
             self.after(0, self.search_panel.set_searching, False)
