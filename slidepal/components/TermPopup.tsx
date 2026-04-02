@@ -21,13 +21,22 @@ type Props = {
 
 export default function TermPopup({ term, x, y, pdfName, onClose, onSaved }: Props) {
   const [result, setResult] = useState<LookupResult | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     setResult(null)
+    setError(null)
     fetch(`/api/lookup?term=${encodeURIComponent(term)}`)
       .then((r) => r.json())
-      .then(setResult)
+      .then((data) => {
+        if (data.error) {
+          setError(data.error)
+        } else {
+          setResult(data)
+        }
+      })
+      .catch(() => setError('通信エラーが発生しました'))
   }, [term])
 
   const handleSave = async () => {
@@ -63,7 +72,9 @@ export default function TermPopup({ term, x, y, pdfName, onClose, onSaved }: Pro
         </button>
       </div>
 
-      {!result ? (
+      {error ? (
+        <p className="text-red-400 text-xs">{error}</p>
+      ) : !result ? (
         <p className="text-slate-400 text-xs animate-pulse">読み込み中...</p>
       ) : (
         <>

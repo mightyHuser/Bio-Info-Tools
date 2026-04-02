@@ -20,9 +20,10 @@ export async function explainTerm(term: string): Promise<TermExplanation> {
 JSON形式: { "explanation": "定義と背景を2〜3文で", "relatedTerms": ["関連用語1", "関連用語2"] }`,
   })
 
-  const parsed = ExplanationSchema.safeParse(JSON.parse(result.text))
+  const raw = result.text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
+  const parsed = ExplanationSchema.safeParse(JSON.parse(raw))
   if (!parsed.success) {
-    return { explanation: result.text, relatedTerms: [] }
+    return { explanation: raw, relatedTerms: [] }
   }
   return parsed.data
 }
@@ -61,7 +62,8 @@ ${QUESTION_PROMPTS[type]}
 ${pdfText.slice(0, 8000)}`,
   })
 
-  const parsed = AnalysisSchema.safeParse(JSON.parse(result.text))
+  const raw = result.text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
+  const parsed = AnalysisSchema.safeParse(JSON.parse(raw))
   if (!parsed.success) return { terms: [], questions: [] }
   return parsed.data
 }

@@ -1,14 +1,11 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
 import 'react-pdf/dist/Page/TextLayer.css'
 import 'react-pdf/dist/Page/AnnotationLayer.css'
 
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.mjs',
-  import.meta.url,
-).toString()
+pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
 
 type Props = {
   fileId: string
@@ -21,7 +18,20 @@ export default function PdfViewer({ fileId, fileName, onTextSelect }: Props) {
   const [pageNumber, setPageNumber] = useState(1)
   const [showPrev, setShowPrev] = useState(false)
   const [showNext, setShowNext] = useState(false)
+  const [pageWidth, setPageWidth] = useState(800)
   const containerRef = useRef<HTMLDivElement>(null)
+  const pdfAreaRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = pdfAreaRef.current
+    if (!el) return
+    const observer = new ResizeObserver(([entry]) => {
+      const w = entry.contentRect.width
+      setPageWidth(Math.max(300, w - 32)) // padding 16px × 2
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
 
   const handleMouseUp = useCallback(() => {
     const selection = window.getSelection()
@@ -44,12 +54,12 @@ export default function PdfViewer({ fileId, fileName, onTextSelect }: Props) {
       </div>
 
       {/* PDF 表示エリア */}
-      <div className="relative flex-1 overflow-auto flex justify-center bg-slate-800 p-4">
+      <div ref={pdfAreaRef} className="relative flex-1 overflow-auto flex justify-center bg-slate-800 p-4">
         <Document
           file={`/api/drive/${fileId}`}
           onLoadSuccess={({ numPages }) => setNumPages(numPages)}
         >
-          <Page pageNumber={pageNumber} width={700} />
+          <Page pageNumber={pageNumber} width={pageWidth} />
         </Document>
 
         {/* ← 前のページ (左端ホバー) */}
