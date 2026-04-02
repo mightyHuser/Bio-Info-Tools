@@ -508,10 +508,29 @@ class DownloadPanel(ctk.CTkFrame):
         self.status_label = ctk.CTkLabel(self, text="",
                                          text_color=COLOR_DIM,
                                          font=ctk.CTkFont(size=11))
-        self.status_label.pack(anchor="w", padx=14, pady=(0, 4))
+        self.status_label.pack(anchor="w", padx=14, pady=(0, 2))
+
+        # ファイル別プログレス
+        file_prog_frame = ctk.CTkFrame(self, fg_color="transparent")
+        file_prog_frame.pack(fill="x", padx=12, pady=(0, 2))
+        self.file_label = ctk.CTkLabel(file_prog_frame, text="",
+                                       text_color=COLOR_DIM,
+                                       font=ctk.CTkFont(family="Consolas", size=10),
+                                       anchor="w")
+        self.file_label.pack(side="left", fill="x", expand=True)
+        self.file_size_label = ctk.CTkLabel(file_prog_frame, text="",
+                                            text_color=COLOR_DIM,
+                                            font=ctk.CTkFont(family="Consolas", size=10),
+                                            width=100, anchor="e")
+        self.file_size_label.pack(side="right")
+        self.file_progress = ctk.CTkProgressBar(self, height=8,
+                                                progress_color=COLOR_BLUE,
+                                                fg_color=COLOR_ACCENT)
+        self.file_progress.pack(fill="x", padx=12, pady=(0, 4))
+        self.file_progress.set(0)
 
         # ログエリア
-        self.log = ctk.CTkTextbox(self, height=130, fg_color=COLOR_BG,
+        self.log = ctk.CTkTextbox(self, height=110, fg_color=COLOR_BG,
                                    text_color=COLOR_TEXT,
                                    font=ctk.CTkFont(family="Consolas", size=11))
         self.log.pack(fill="x", padx=12, pady=(0, 10))
@@ -531,6 +550,14 @@ class DownloadPanel(ctk.CTkFrame):
         self.progress.set(value)
         if text:
             self.status_label.configure(text=text)
+
+    def set_file_progress(self, fname: str, downloaded: int, total: int):
+        ratio = downloaded / total if total else 0
+        self.file_progress.set(ratio)
+        dl_mb = downloaded / 1e6
+        tot_mb = total / 1e6
+        self.file_label.configure(text=fname)
+        self.file_size_label.configure(text=f"{dl_mb:.1f} / {tot_mb:.1f} MB")
 
     def _start_download(self):
         selected = self.get_selected()
@@ -575,11 +602,16 @@ class DownloadPanel(ctk.CTkFrame):
                 def gui_log(msg, _idx=i):
                     self.after(0, self.log_write, f"    {msg}")
 
+                def gui_progress(fname, downloaded, total):
+                    self.after(0, self.set_file_progress, fname, downloaded, total)
+
                 try:
                     if use_toolkit:
                         ok = download_with_prefetch(run_acc, run_dir)
                     else:
-                        ok = download_via_ebi_ftp(run_acc, run_dir, log_fn=gui_log)
+                        ok = download_via_ebi_ftp(run_acc, run_dir,
+                                                  log_fn=gui_log,
+                                                  progress_fn=gui_progress)
                 except Exception as e:
                     ok = False
                     self.after(0, self.log_write, f"    エラー: {e}")
@@ -608,8 +640,9 @@ class DownloadPanel(ctk.CTkFrame):
             self.after(0, self.log_write,
                        f"\n✅ 完了: {len(ok_list)}/{n}  "
                        f"メタデータ → {meta_path}")
-            self.after(0, self.dl_btn.configure,
-                       {"state": "normal", "text": "⬇  ダウンロード開始"})
+            self.after(0, lambda: self.dl_btn.configure(
+                state="normal", text="⬇  ダウンロード開始"
+            ))
 
             if fail_list:
                 self.after(0, messagebox.showwarning,

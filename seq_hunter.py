@@ -447,11 +447,12 @@ def _ena_api_ftp_urls(run_acc: str) -> list:
     return []
 
 
-def download_via_ebi_ftp(run_acc: str, outdir: Path, log_fn=None) -> bool:
+def download_via_ebi_ftp(run_acc: str, outdir: Path, log_fn=None, progress_fn=None) -> bool:
     """EBI FTP 経由で FASTQ をダウンロード（SRA Toolkit 不要）
 
     ENA Portal API でファイルパスを取得してからダウンロードする。
-    log_fn: GUI 等からログを受け取るコールバック。None の場合は rich console を使用。
+    log_fn:      GUI 等からログを受け取るコールバック (msg: str)。None なら rich console。
+    progress_fn: ファイル別進捗コールバック (fname: str, downloaded_bytes: int, total_bytes: int)。
     """
     _log = log_fn if log_fn else (lambda msg: console.print(msg))
 
@@ -482,11 +483,16 @@ def download_via_ebi_ftp(run_acc: str, outdir: Path, log_fn=None) -> bool:
 
             if log_fn:
                 # GUI モード: シンプルダウンロード（rich Progress バーなし）
+                total_bytes = int(response.headers.get("content-length", 0))
+                downloaded = 0
                 with requests.get(url, stream=True, timeout=600) as r:
                     r.raise_for_status()
                     with open(dest, "wb") as f:
                         for chunk in r.iter_content(chunk_size=65536):
                             f.write(chunk)
+                            downloaded += len(chunk)
+                            if progress_fn and total_bytes:
+                                progress_fn(fname, downloaded, total_bytes)
             else:
                 # CLI モード: rich Progress バーあり
                 with Progress(
