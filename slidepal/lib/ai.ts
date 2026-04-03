@@ -22,6 +22,14 @@ function getModel(): LanguageModel {
   return gateway(process.env.AI_GATEWAY_MODEL ?? 'anthropic/claude-sonnet-4.6')
 }
 
+// Ollama使用時は response_format: json_object でJSON出力を強制する
+function jsonProviderOptions() {
+  if ((process.env.AI_PROVIDER ?? 'vercel') === 'ollama') {
+    return { providerOptions: { openai: { response_format: { type: 'json_object' as const } } } }
+  }
+  return {}
+}
+
 // ── スキーマ定義 ──────────────────────────────────────────────
 
 const ExplanationSchema = z.object({
@@ -58,6 +66,7 @@ function parseJson<T>(text: string): T {
 export async function explainTerm(term: string): Promise<TermExplanation> {
   const { text } = await generateText({
     model: getModel(),
+    ...jsonProviderOptions(),
     system: 'あなたは学術・科学分野の専門用語を説明するアシスタントです。回答はJSONオブジェクトのみで返してください。説明文・マークダウン・コードブロックは不要です。',
     prompt: `次の用語を日本語で説明し、以下のJSONフォーマットのみで返してください。
 {"explanation":"用語の定義と背景を2〜3文","relatedTerms":["関連用語1","関連用語2"]}
@@ -78,6 +87,7 @@ export async function analyzePresentation(
 ): Promise<PresentationAnalysis> {
   const { text } = await generateText({
     model: getModel(),
+    ...jsonProviderOptions(),
     system: 'あなたは学術発表のアシスタントです。回答はJSONオブジェクトのみで返してください。説明文・マークダウン・コードブロックは不要です。',
     prompt: `以下の発表テキストを分析し、このJSONフォーマットのみで返してください。
 {"terms":[{"term":"専門用語","page":1}],"questions":["質問1","質問2"]}
