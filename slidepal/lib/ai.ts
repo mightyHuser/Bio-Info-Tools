@@ -22,12 +22,30 @@ function getModel(): LanguageModel {
   return gateway(process.env.AI_GATEWAY_MODEL ?? 'anthropic/claude-sonnet-4.6')
 }
 
-// Ollama使用時は response_format: json_object でJSON出力を強制する
-function jsonProviderOptions() {
-  if ((process.env.AI_PROVIDER ?? 'vercel') === 'ollama') {
-    return { providerOptions: { openai: { response_format: { type: 'json_object' as const } } } }
-  }
-  return {}
+// Ollama ネイティブ API で format:"json" を使いJSONを強制する
+// OpenAI互換レイヤーの response_format はモデルによって無視されるため、
+// /api/chat エンドポイントを直接叩くことでランタイムレベルでJSON出力を保証する
+async function ollamaGenerateJson<T>(system: string, prompt: string): Promise<T> {
+  const baseURL = (process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434/v1')
+    .replace(/\/v1\/?$/, '')  // /v1 を除いてベースURLを取得
+  const modelName = process.env.LOCAL_LLM_MODEL ?? 'gemma4:e4b'
+
+  const res = await fetch(`${baseURL}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: modelName,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: prompt },
+      ],
+      format: 'json',
+      stream: false,
+    }),
+  })
+  if (!res.ok) throw new Error(`Ollama API error: ${res.status} ${await res.text()}`)
+  const data = await res.json() as { message: { content: string } }
+  return parseJson<T>(data.message.content)
 }
 
 // ── スキーマ定義 ──────────────────────────────────────────────
@@ -64,15 +82,17 @@ function parseJson<T>(text: string): T {
 // ── 関数 ──────────────────────────────────────────────────────
 
 export async function explainTerm(term: string): Promise<TermExplanation> {
-  const { text } = await generateText({
-    model: getModel(),
-    ...jsonProviderOptions(),
-    system: 'あなたは学術・科学分野の専門用語を説明するアシスタントです。回答はJSONオブジェクトのみで返してください。説明文・マークダウン・コードブロックは不要です。',
-    prompt: `次の用語を日本語で説明し、以下のJSONフォーマットのみで返してください。
+  const system = 'あなたは学術・科学分野の専門用語を説明するアシスタントです。必ず日本語で回答してください。'
+  const prompt = `次の用語を日本語で説明してください。
 {"explanation":"用語の定義と背景を2〜3文","relatedTerms":["関連用語1","関連用語2"]}
+というJSONフォーマットで返してください。
 
-用語: "${term}"`,
-  })
+用語: "${term}"`
+
+  if ((process.env.AI_PROVIDER ?? 'vercel') === 'ollama') {
+    return ollamaGenerateJson<TermExplanation>(system, prompt)
+  }
+  const { text } = await generateText({ model: getModel(), system, prompt })
   return parseJson<TermExplanation>(text)
 }
 
@@ -85,18 +105,20 @@ export async function analyzePresentation(
   pdfText: string,
   type: 'progress' | 'journal'
 ): Promise<PresentationAnalysis> {
-  const { text } = await generateText({
-    model: getModel(),
-    ...jsonProviderOptions(),
-    system: 'あなたは学術発表のアシスタントです。回答はJSONオブジェクトのみで返してください。説明文・マークダウン・コードブロックは不要です。',
-    prompt: `以下の発表テキストを分析し、このJSONフォーマットのみで返してください。
+  const system = 'あなたは学術発表のアシスタントです。必ず日本語で回答してください。'
+  const prompt = `以下の発表テキストを分析してください。
 {"terms":[{"term":"専門用語","page":1}],"questions":["質問1","質問2"]}
+というJSONフォーマットで返してください。
 
 発表タイプ: ${type === 'progress' ? '進捗報告' : '抄読'}
 質問観点: ${QUESTION_PROMPTS[type]}
 
 --- 発表テキスト ---
-${pdfText.slice(0, 8000)}`,
-  })
+${pdfText.slice(0, 8000)}`
+
+  if ((process.env.AI_PROVIDER ?? 'vercel') === 'ollama') {
+    return ollamaGenerateJson<PresentationAnalysis>(system, prompt)
+  }
+  const { text } = await generateText({ model: getModel(), system, prompt })
   return parseJson<PresentationAnalysis>(text)
 }
