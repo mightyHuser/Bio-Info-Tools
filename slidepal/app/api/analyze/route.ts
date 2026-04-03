@@ -16,16 +16,10 @@ export async function POST(req: NextRequest) {
   if (!pdfRes.ok) return NextResponse.json({ error: 'PDF fetch failed' }, { status: 502 })
   const buffer = await pdfRes.arrayBuffer()
 
-  // pdfjs-dist でテキスト抽出 (legacy build for Node.js)
-  const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs' as any)
-  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise
-  const texts: string[] = []
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i)
-    const content = await page.getTextContent()
-    texts.push(content.items.map((item: any) => (item as any).str).join(' '))
-  }
-  const fullText = texts.join('\n')
+  // pdf-parse でテキスト抽出 (Node.js ネイティブ、worker 不要)
+  const pdfParse = (await import('pdf-parse')).default
+  const parsed = await pdfParse(Buffer.from(buffer))
+  const fullText = parsed.text
 
   // AI 解析
   const analysis = await analyzePresentation(fullText, type)
