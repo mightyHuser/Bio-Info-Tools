@@ -16,7 +16,12 @@ export default async function HomePage() {
 
   return (
     <main className="max-w-3xl mx-auto p-8">
-      <h1 className="text-2xl font-bold mb-2">SlidePal</h1>
+      <div className="flex items-center justify-between mb-2">
+        <h1 className="text-2xl font-bold">SlidePal</h1>
+        <Link href="/database" className="text-sm text-slate-400 hover:text-blue-400 transition-colors">
+          📚 用語DB
+        </Link>
+      </div>
       <p className="text-slate-400 mb-8">Google Drive の PDF ファイル一覧</p>
 
       <ul className="space-y-2">
