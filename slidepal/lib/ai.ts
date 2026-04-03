@@ -22,14 +22,8 @@ function getModel(): LanguageModel {
   return gateway(process.env.AI_GATEWAY_MODEL ?? 'anthropic/claude-sonnet-4.6')
 }
 
-// Ollama ネイティブ API で JSON Schema を使い構造化出力を強制する
-// format に JSON Schema を渡すと Ollama の制約デコーディングが有効になり、
-// モデルの命令遵守能力に依存せずスキーマに準拠した出力が保証される
-async function ollamaGenerateJson<T>(
-  system: string,
-  prompt: string,
-  schema: Record<string, unknown>,
-): Promise<T> {
+// Ollama ネイティブ API 呼び出し
+async function ollamaChat(system: string, prompt: string): Promise<string> {
   const baseURL = (process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434/v1')
     .replace(/\/v1\/?$/, '')
   const modelName = process.env.LOCAL_LLM_MODEL ?? 'gemma4:e4b'
@@ -43,13 +37,30 @@ async function ollamaGenerateJson<T>(
         { role: 'system', content: system },
         { role: 'user', content: prompt },
       ],
-      format: schema,
       stream: false,
     }),
   })
   if (!res.ok) throw new Error(`Ollama API error: ${res.status} ${await res.text()}`)
   const data = await res.json() as { message: { content: string } }
-  return parseJson<T>(data.message.content)
+  return data.message.content
+}
+
+// 区切り文字形式のテキストから用語リストを抽出
+// 例: "用語1\n用語2\n用語3" → [{term:"用語1"}, ...]
+function parseTermLines(text: string): Array<{ term: string }> {
+  return text
+    .split(/\n|、|,/)
+    .map(s => s.replace(/^\s*[-・*\d.]+\s*/, '').trim())
+    .filter(s => s.length > 0 && s.length < 60)
+    .map(term => ({ term }))
+}
+
+// 区切り文字形式のテキストから質問リストを抽出
+function parseQuestionLines(text: string): string[] {
+  return text
+    .split('\n')
+    .map(s => s.replace(/^\s*[-・*\d.]+\s*/, '').trim())
+    .filter(s => s.length > 5)
 }
 
 // ── スキーマ定義 ──────────────────────────────────────────────
@@ -86,23 +97,30 @@ function parseJson<T>(text: string): T {
 // ── 関数 ──────────────────────────────────────────────────────
 
 export async function explainTerm(term: string): Promise<TermExplanation> {
-  const system = 'あなたは学術・科学分野の専門用語を説明するアシスタントです。必ず日本語で回答してください。'
-  const prompt = `次の用語を日本語で説明してください。
-{"explanation":"用語の定義と背景を2〜3文","relatedTerms":["関連用語1","関連用語2"]}
-というJSONフォーマットで返してください。
-
-用語: "${term}"`
-
   if ((process.env.AI_PROVIDER ?? 'vercel') === 'ollama') {
-    return ollamaGenerateJson<TermExplanation>(system, prompt, {
-      type: 'object',
-      properties: {
-        explanation: { type: 'string' },
-        relatedTerms: { type: 'array', items: { type: 'string' } },
-      },
-      required: ['explanation', 'relatedTerms'],
-    })
+    // Ollama向け: セクション区切りの平文で返してもらい手動パース
+    const text = await ollamaChat(
+      'あなたは学術・科学分野の専門用語を説明するアシスタントです。必ず日本語で回答してください。',
+      `次の用語を日本語で説明してください。
+
+【説明】
+（用語の定義と背景を2〜3文で書く）
+
+【関連用語】
+（関連する専門用語を1行に1つ、3〜5個書く）
+
+用語: "${term}"`,
+    )
+    const explanationMatch = text.match(/【説明】\s*([\s\S]*?)(?=【関連用語】|$)/)
+    const relatedMatch = text.match(/【関連用語】\s*([\s\S]*)$/)
+    return {
+      explanation: explanationMatch?.[1]?.trim() ?? text.trim(),
+      relatedTerms: relatedMatch ? parseTermLines(relatedMatch[1]) .map(t => t.term) : [],
+    }
   }
+
+  const system = 'あなたは学術・科学分野の専門用語を説明するアシスタントです。必ず日本語で回答してください。'
+  const prompt = `次の用語を日本語で説明し、{"explanation":"定義2〜3文","relatedTerms":["関連用語1"]}のJSONで返してください。用語: "${term}"`
   const { text } = await generateText({ model: getModel(), system, prompt })
   return parseJson<TermExplanation>(text)
 }
@@ -128,25 +146,36 @@ export async function analyzePresentation(
 ${pdfText.slice(0, 8000)}`
 
   if ((process.env.AI_PROVIDER ?? 'vercel') === 'ollama') {
-    return ollamaGenerateJson<PresentationAnalysis>(system, prompt, {
-      type: 'object',
-      properties: {
-        terms: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              term: { type: 'string' },
-              page: { type: 'number' },
-            },
-            required: ['term'],
-          },
-        },
-        questions: { type: 'array', items: { type: 'string' } },
-      },
-      required: ['terms', 'questions'],
-    })
+    // Ollama向け: セクション区切りの平文で返してもらい手動パース
+    const text = await ollamaChat(
+      'あなたは学術発表のアシスタントです。必ず日本語で回答してください。',
+      `以下の発表テキストを分析してください。
+
+【専門用語】
+（発表中の難解な専門用語を1行に1つ列挙する）
+
+【質問】
+（発表者への質問を1行に1つ列挙する）
+質問観点: ${QUESTION_PROMPTS[type]}
+
+発表タイプ: ${type === 'progress' ? '進捗報告' : '抄読'}
+
+--- 発表テキスト ---
+${pdfText.slice(0, 6000)}`,
+    )
+    const termsMatch = text.match(/【専門用語】\s*([\s\S]*?)(?=【質問】|$)/)
+    const questionsMatch = text.match(/【質問】\s*([\s\S]*)$/)
+    return {
+      terms: termsMatch ? parseTermLines(termsMatch[1]) : [],
+      questions: questionsMatch ? parseQuestionLines(questionsMatch[1]) : [],
+    }
   }
+
+  const system = 'あなたは学術発表のアシスタントです。必ず日本語で回答してください。'
+  const prompt = `以下の発表テキストを分析し、{"terms":[{"term":"用語"}],"questions":["質問"]}のJSONで返してください。
+発表タイプ: ${type === 'progress' ? '進捗報告' : '抄読'}、質問観点: ${QUESTION_PROMPTS[type]}
+--- 発表テキスト ---
+${pdfText.slice(0, 8000)}`
   const { text } = await generateText({ model: getModel(), system, prompt })
   return parseJson<PresentationAnalysis>(text)
 }
