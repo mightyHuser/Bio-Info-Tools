@@ -22,12 +22,16 @@ function getModel(): LanguageModel {
   return gateway(process.env.AI_GATEWAY_MODEL ?? 'anthropic/claude-sonnet-4.6')
 }
 
-// Ollama ネイティブ API で format:"json" を使いJSONを強制する
-// OpenAI互換レイヤーの response_format はモデルによって無視されるため、
-// /api/chat エンドポイントを直接叩くことでランタイムレベルでJSON出力を保証する
-async function ollamaGenerateJson<T>(system: string, prompt: string): Promise<T> {
+// Ollama ネイティブ API で JSON Schema を使い構造化出力を強制する
+// format に JSON Schema を渡すと Ollama の制約デコーディングが有効になり、
+// モデルの命令遵守能力に依存せずスキーマに準拠した出力が保証される
+async function ollamaGenerateJson<T>(
+  system: string,
+  prompt: string,
+  schema: Record<string, unknown>,
+): Promise<T> {
   const baseURL = (process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434/v1')
-    .replace(/\/v1\/?$/, '')  // /v1 を除いてベースURLを取得
+    .replace(/\/v1\/?$/, '')
   const modelName = process.env.LOCAL_LLM_MODEL ?? 'gemma4:e4b'
 
   const res = await fetch(`${baseURL}/api/chat`, {
@@ -39,7 +43,7 @@ async function ollamaGenerateJson<T>(system: string, prompt: string): Promise<T>
         { role: 'system', content: system },
         { role: 'user', content: prompt },
       ],
-      format: 'json',
+      format: schema,
       stream: false,
     }),
   })
@@ -90,7 +94,14 @@ export async function explainTerm(term: string): Promise<TermExplanation> {
 用語: "${term}"`
 
   if ((process.env.AI_PROVIDER ?? 'vercel') === 'ollama') {
-    return ollamaGenerateJson<TermExplanation>(system, prompt)
+    return ollamaGenerateJson<TermExplanation>(system, prompt, {
+      type: 'object',
+      properties: {
+        explanation: { type: 'string' },
+        relatedTerms: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['explanation', 'relatedTerms'],
+    })
   }
   const { text } = await generateText({ model: getModel(), system, prompt })
   return parseJson<TermExplanation>(text)
@@ -117,7 +128,24 @@ export async function analyzePresentation(
 ${pdfText.slice(0, 8000)}`
 
   if ((process.env.AI_PROVIDER ?? 'vercel') === 'ollama') {
-    return ollamaGenerateJson<PresentationAnalysis>(system, prompt)
+    return ollamaGenerateJson<PresentationAnalysis>(system, prompt, {
+      type: 'object',
+      properties: {
+        terms: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              term: { type: 'string' },
+              page: { type: 'number' },
+            },
+            required: ['term'],
+          },
+        },
+        questions: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['terms', 'questions'],
+    })
   }
   const { text } = await generateText({ model: getModel(), system, prompt })
   return parseJson<PresentationAnalysis>(text)
