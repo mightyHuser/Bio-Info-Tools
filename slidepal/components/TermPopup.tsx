@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 type LookupResult = {
   source: 'db' | 'ai'
@@ -24,6 +24,20 @@ export default function TermPopup({ term, x, y, pdfName, onClose, onSaved }: Pro
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const popupRef = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState({ left: x, top: y + 8 })
+
+  useLayoutEffect(() => {
+    const el = popupRef.current
+    if (!el) return
+    const POPUP_W = el.offsetWidth
+    const POPUP_H = el.offsetHeight
+    const container = el.offsetParent as HTMLElement | null
+    const cW = container?.offsetWidth  ?? window.innerWidth
+    const cH = container?.offsetHeight ?? window.innerHeight
+    const left = Math.min(x, Math.max(0, cW - POPUP_W - 8))
+    const top  = y + 8 + POPUP_H > cH ? Math.max(0, y - POPUP_H - 8) : y + 8
+    setPos({ left, top })
+  }, [x, y, result, error])
 
   useEffect(() => {
     setResult(null)
@@ -59,20 +73,11 @@ export default function TermPopup({ term, x, y, pdfName, onClose, onSaved }: Pro
 
   const borderColor = result?.source === 'db' ? 'border-green-600' : 'border-blue-500'
 
-  // コンテナ内に収まるよう位置を調整
-  const POPUP_W = 288 // w-72
-  const POPUP_H = popupRef.current?.offsetHeight ?? 200
-  const container = popupRef.current?.offsetParent as HTMLElement | null
-  const cW = container?.offsetWidth  ?? window.innerWidth
-  const cH = container?.offsetHeight ?? window.innerHeight
-  const left = Math.min(x, cW - POPUP_W - 8)
-  const top  = y + 8 + POPUP_H > cH ? y - POPUP_H - 8 : y + 8
-
   return (
     <div
       ref={popupRef}
-      className={`absolute z-50 bg-slate-900 border ${borderColor} rounded-lg p-4 w-72 shadow-xl`}
-      style={{ left, top }}
+      className={`absolute z-50 bg-slate-900 border ${borderColor} rounded-lg p-4 w-72 max-h-80 overflow-y-auto shadow-xl`}
+      style={{ left: pos.left, top: pos.top }}
     >
       <div className="flex justify-between items-center mb-2">
         <span className={`text-sm font-semibold ${result?.source === 'db' ? 'text-green-400' : 'text-blue-400'}`}>
