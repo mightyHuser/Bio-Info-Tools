@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
 
   // AI 解析
   const analysis = await analyzePresentation(fullText, type)
+  console.log('[analyze] result:', JSON.stringify(analysis).slice(0, 500))
 
   // 各用語が DB 済みかチェック
   const termsWithDbFlag = analysis.terms.map((t) => ({

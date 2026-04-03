@@ -152,11 +152,24 @@ export async function analyzePresentation(
 --- 発表テキスト ---
 ${pdfText.slice(0, 6000)}`,
     )
-    const termsMatch = text.match(/【専門用語】\s*([\s\S]*?)(?=【質問】|$)/)
-    const questionsMatch = text.match(/【質問】\s*([\s\S]*)$/)
+    // gemmaはフォーマット指示を無視するため、マークダウンの構造から直接抽出する
+    // **用語** パターンから専門用語を抽出（重複除去）
+    const boldTerms = [...new Set(
+      [...text.matchAll(/\*\*([^*\n]{2,30})\*\*/g)]
+        .map(m => m[1].replace(/[：:（）()]/g, '').trim())
+        .filter(s => s.length >= 2 && s.length <= 25 && !/^[0-9\s]+$/.test(s))
+    )].map(term => ({ term }))
+
+    // 番号付きリストや箇条書きから質問候補を抽出
+    const listLines = text
+      .split('\n')
+      .map(l => l.replace(/^\s*[-*・\d.]+\s*/, '').replace(/\*\*/g, '').trim())
+      .filter(l => l.length > 10 && l.includes('（') || l.includes('例：') || l.endsWith('。') || l.endsWith('か？'))
+      .slice(0, 8)
+
     return {
-      terms: termsMatch ? parseTermLines(termsMatch[1]) : [],
-      questions: questionsMatch ? parseQuestionLines(questionsMatch[1]) : [],
+      terms: boldTerms.slice(0, 20),
+      questions: listLines.length > 0 ? listLines : ['発表内容の質問は手動で作成してください'],
     }
   }
 
