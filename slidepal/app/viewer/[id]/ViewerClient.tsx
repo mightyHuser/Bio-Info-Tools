@@ -1,8 +1,10 @@
 'use client'
 
-import PdfViewer from '@/components/PdfViewer'
+import dynamic from 'next/dynamic'
 import TermPopup from '@/components/TermPopup'
 import { useState } from 'react'
+
+const PdfViewer = dynamic(() => import('@/components/PdfViewer'), { ssr: false })
 
 type Props = { fileId: string; fileName: string }
 
