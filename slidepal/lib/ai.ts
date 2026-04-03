@@ -1,20 +1,20 @@
 // slidepal/lib/ai.ts
 import { generateText, Output, type LanguageModel } from 'ai'
-import { createOllama } from 'ollama-ai-provider'
+import { createOpenAI } from '@ai-sdk/openai'
 import { z } from 'zod'
 
 // ── プロバイダー切り替え ────────────────────────────────────
-// AI_PROVIDER=ollama  → Ollama ローカル LLM
+// AI_PROVIDER=ollama  → Ollama ローカル LLM (OpenAI互換API経由)
 // AI_PROVIDER=vercel  → Vercel AI Gateway (デフォルト)
 
 function getModel(): LanguageModel {
   const provider = process.env.AI_PROVIDER ?? 'vercel'
 
   if (provider === 'ollama') {
-    const baseURL = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434/api'
-    const modelName = process.env.LOCAL_LLM_MODEL ?? 'gemma3:4b'
-    const ollama = createOllama({ baseURL })
-    return ollama(modelName) as unknown as LanguageModel
+    const baseURL = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434/v1'
+    const modelName = process.env.LOCAL_LLM_MODEL ?? 'gemma4:e4b'
+    const ollama = createOpenAI({ baseURL, apiKey: 'ollama' })
+    return ollama(modelName)
   }
 
   const { createGatewayProvider } = require('@ai-sdk/gateway') as typeof import('@ai-sdk/gateway')
