@@ -1,5 +1,5 @@
 // slidepal/lib/ai.ts
-import { generateText, Output, type LanguageModel } from 'ai'
+import { generateText, type LanguageModel } from 'ai'
 import { createOpenAI } from '@ai-sdk/openai'
 import { z } from 'zod'
 
@@ -41,16 +41,30 @@ const AnalysisSchema = z.object({
 
 export type PresentationAnalysis = z.infer<typeof AnalysisSchema>
 
+// ── JSON パーサー (ローカルLLMはmarkdown付きで返すことがあるため) ──
+
+function parseJson<T>(text: string): T {
+  // ```json ... ``` や ``` ... ``` フェンスを除去
+  const stripped = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
+  // 最初の { から最後の } を抽出
+  const start = stripped.indexOf('{')
+  const end = stripped.lastIndexOf('}')
+  if (start === -1 || end === -1) throw new Error(`JSONが見つかりません: ${stripped.slice(0, 100)}`)
+  return JSON.parse(stripped.slice(start, end + 1)) as T
+}
+
 // ── 関数 ──────────────────────────────────────────────────────
 
 export async function explainTerm(term: string): Promise<TermExplanation> {
-  const { output } = await generateText({
+  const { text } = await generateText({
     model: getModel(),
-    output: Output.object({ schema: ExplanationSchema }),
-    system: 'あなたは学術・科学分野の専門用語を分かりやすく説明するアシスタントです。必ず日本語で回答してください。',
-    prompt: `次の用語を日本語で説明してください: "${term}"`,
+    system: 'あなたは学術・科学分野の専門用語を説明するアシスタントです。回答はJSONオブジェクトのみで返してください。説明文・マークダウン・コードブロックは不要です。',
+    prompt: `次の用語を日本語で説明し、以下のJSONフォーマットのみで返してください。
+{"explanation":"用語の定義と背景を2〜3文","relatedTerms":["関連用語1","関連用語2"]}
+
+用語: "${term}"`,
   })
-  return output
+  return parseJson<TermExplanation>(text)
 }
 
 const QUESTION_PROMPTS = {
@@ -62,16 +76,17 @@ export async function analyzePresentation(
   pdfText: string,
   type: 'progress' | 'journal'
 ): Promise<PresentationAnalysis> {
-  const { output } = await generateText({
+  const { text } = await generateText({
     model: getModel(),
-    output: Output.object({ schema: AnalysisSchema }),
-    system: 'あなたは学術発表のアシスタントです。必ず日本語で回答してください。',
-    prompt: `以下の発表テキストを分析してください。
+    system: 'あなたは学術発表のアシスタントです。回答はJSONオブジェクトのみで返してください。説明文・マークダウン・コードブロックは不要です。',
+    prompt: `以下の発表テキストを分析し、このJSONフォーマットのみで返してください。
+{"terms":[{"term":"専門用語","page":1}],"questions":["質問1","質問2"]}
+
 発表タイプ: ${type === 'progress' ? '進捗報告' : '抄読'}
 質問観点: ${QUESTION_PROMPTS[type]}
 
 --- 発表テキスト ---
 ${pdfText.slice(0, 8000)}`,
   })
-  return output
+  return parseJson<PresentationAnalysis>(text)
 }
