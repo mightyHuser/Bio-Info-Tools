@@ -9,7 +9,8 @@ export default async function HomePage() {
   if (!session) redirect('/api/auth/signin')
 
   const accessToken = (session as any).accessToken as string | undefined
-  if (!accessToken) redirect('/api/auth/signin')
+  const authError   = (session as any).error as string | undefined
+  if (!accessToken || authError === 'RefreshAccessTokenError') redirect('/api/auth/signin')
 
   const files = await listPdfFiles(accessToken)
 
