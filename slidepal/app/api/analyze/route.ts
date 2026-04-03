@@ -17,8 +17,14 @@ export async function POST(req: NextRequest) {
   const buffer = await pdfRes.arrayBuffer()
 
   // pdf-parse でテキスト抽出 (Node.js ネイティブ、worker 不要)
-  // pdfjs-dist で server 側テキスト抽出 (worker 無効化)
-  const pdfjsLib = await import('pdfjs-dist')
+  // pdfjs-dist legacy ビルドで server 側テキスト抽出
+  // Node.js に DOMMatrix が無いためスタブを注入
+  if (typeof globalThis.DOMMatrix === 'undefined') {
+    (globalThis as any).DOMMatrix = class DOMMatrix {
+      constructor() {}
+    }
+  }
+  const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs' as any)
   pdfjsLib.GlobalWorkerOptions.workerSrc = ''
   const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise
   const texts: string[] = []
