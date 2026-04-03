@@ -17,7 +17,8 @@ export async function POST(req: NextRequest) {
   const buffer = await pdfRes.arrayBuffer()
 
   // pdf-parse でテキスト抽出 (Node.js ネイティブ、worker 不要)
-  const pdfParse = (await import('pdf-parse')).default
+  const pdfParseModule = await import('pdf-parse')
+  const pdfParse = pdfParseModule.default ?? pdfParseModule
   const parsed = await pdfParse(Buffer.from(buffer))
   const fullText = parsed.text
 
