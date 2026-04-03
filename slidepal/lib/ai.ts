@@ -138,12 +138,13 @@ export async function analyzePresentation(
 ): Promise<PresentationAnalysis> {
   if ((process.env.AI_PROVIDER ?? 'vercel') === 'ollama') {
     // Ollama向け: セクション区切りの平文で返してもらい手動パース
-    // 専門用語と質問を別プロンプトで取得（gemmaはマルチタスク指示を無視しがち）
+    // 専門用語と質問を別プロンプトで取得
+    // gemmaは列挙指示を無視するため、要約させて**太字**から用語を抽出する
     const [termsText, questionsText] = await Promise.all([
       ollamaChat(
         'あなたは学術発表のアシスタントです。必ず日本語で回答してください。',
-        `以下の発表テキストに登場する難解な専門用語・学術用語をすべて列挙してください。
-用語のみを1行に1つ書いてください。説明や番号は不要です。
+        `以下の発表テキストの内容を日本語で要約してください。
+重要な専門用語・学術用語・技術用語が登場したら必ず**太字**（アスタリスク2つで囲む）で記述してください。
 
 --- 発表テキスト ---
 ${pdfText.slice(0, 5000)}`,
@@ -162,27 +163,15 @@ ${pdfText.slice(0, 5000)}`,
       ),
     ])
 
-    // 行ごとに専門用語を抽出（単語・短いフレーズのみ）
+    // **太字**パターンから専門用語を抽出（gemmaが要約中に自然に使う形式）
     const terms = [...new Set(
-      termsText
-        .split('\n')
-        .map(l => l
-          .replace(/^#+\s*/, '')           // ## ### などのヘッダー記号を除去
-          .replace(/\*\*/g, '')            // **太字** マーカー除去
-          .replace(/^\s*[-*・\d.、|]+\s*/, '') // 箇条書き記号・表記号除去
-          .replace(/[🎯📋✅💡🔍📊🎓]+/g, '') // 絵文字除去
-          .trim()
-        )
+      [...termsText.matchAll(/\*\*([^*\n]+)\*\*/g)]
+        .map(m => m[1].trim())
         .filter(s =>
           s.length >= 2 &&
-          s.length <= 20 &&              // 20文字以内の短い用語のみ
-          !/^[0-9\s]+$/.test(s) &&       // 数字のみ除外
-          !s.includes('。') &&            // 文末句点があるものは文章なので除外
-          !s.includes('、') &&            // 読点が多いものも文章扱い
-          !s.includes('|') &&            // テーブル行除外
-          !s.includes('(') &&            // カッコ付き説明文除外
-          !s.includes('（') &&
-          !/[A-Za-z]{10,}/.test(s)       // 長い英単語の羅列除外
+          s.length <= 25 &&
+          !s.includes('。') &&
+          !s.includes('|')
         )
     )].map(term => ({ term }))
 
