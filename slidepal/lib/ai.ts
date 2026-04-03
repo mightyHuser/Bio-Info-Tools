@@ -162,12 +162,28 @@ ${pdfText.slice(0, 5000)}`,
       ),
     ])
 
-    // 行ごとに専門用語を抽出（**太字**パターンも対応）
+    // 行ごとに専門用語を抽出（単語・短いフレーズのみ）
     const terms = [...new Set(
       termsText
         .split('\n')
-        .map(l => l.replace(/^\s*[-*・\d.、]+\s*/, '').replace(/\*\*/g, '').trim())
-        .filter(s => s.length >= 2 && s.length <= 30 && !/^[0-9\s]+$/.test(s))
+        .map(l => l
+          .replace(/^#+\s*/, '')           // ## ### などのヘッダー記号を除去
+          .replace(/\*\*/g, '')            // **太字** マーカー除去
+          .replace(/^\s*[-*・\d.、|]+\s*/, '') // 箇条書き記号・表記号除去
+          .replace(/[🎯📋✅💡🔍📊🎓]+/g, '') // 絵文字除去
+          .trim()
+        )
+        .filter(s =>
+          s.length >= 2 &&
+          s.length <= 20 &&              // 20文字以内の短い用語のみ
+          !/^[0-9\s]+$/.test(s) &&       // 数字のみ除外
+          !s.includes('。') &&            // 文末句点があるものは文章なので除外
+          !s.includes('、') &&            // 読点が多いものも文章扱い
+          !s.includes('|') &&            // テーブル行除外
+          !s.includes('(') &&            // カッコ付き説明文除外
+          !s.includes('（') &&
+          !/[A-Za-z]{10,}/.test(s)       // 長い英単語の羅列除外
+        )
     )].map(term => ({ term }))
 
     // ？を含む行のみを質問として抽出
