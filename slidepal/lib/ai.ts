@@ -134,17 +134,6 @@ export async function analyzePresentation(
   pdfText: string,
   type: 'progress' | 'journal'
 ): Promise<PresentationAnalysis> {
-  const system = 'あなたは学術発表のアシスタントです。必ず日本語で回答してください。'
-  const prompt = `以下の発表テキストを分析してください。
-{"terms":[{"term":"専門用語","page":1}],"questions":["質問1","質問2"]}
-というJSONフォーマットで返してください。
-
-発表タイプ: ${type === 'progress' ? '進捗報告' : '抄読'}
-質問観点: ${QUESTION_PROMPTS[type]}
-
---- 発表テキスト ---
-${pdfText.slice(0, 8000)}`
-
   if ((process.env.AI_PROVIDER ?? 'vercel') === 'ollama') {
     // Ollama向け: セクション区切りの平文で返してもらい手動パース
     const text = await ollamaChat(
