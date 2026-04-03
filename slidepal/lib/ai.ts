@@ -76,6 +76,8 @@ const AnalysisSchema = z.object({
   terms: z.array(z.object({
     term: z.string().describe('難解な専門用語'),
     page: z.number().optional().describe('登場ページ番号'),
+    explanation: z.string().optional().describe('用語の説明'),
+    relatedTerms: z.array(z.string()).optional().describe('関連用語'),
   })),
   questions: z.array(z.string()).describe('発表者への質問候補'),
 })
@@ -136,40 +138,59 @@ export async function analyzePresentation(
 ): Promise<PresentationAnalysis> {
   if ((process.env.AI_PROVIDER ?? 'vercel') === 'ollama') {
     // Ollama向け: セクション区切りの平文で返してもらい手動パース
-    const text = await ollamaChat(
-      'あなたは学術発表のアシスタントです。必ず日本語で回答してください。',
-      `以下の発表テキストを分析してください。
+    // 専門用語と質問を別プロンプトで取得（gemmaはマルチタスク指示を無視しがち）
+    const [termsText, questionsText] = await Promise.all([
+      ollamaChat(
+        'あなたは学術発表のアシスタントです。必ず日本語で回答してください。',
+        `以下の発表テキストに登場する難解な専門用語・学術用語をすべて列挙してください。
+用語のみを1行に1つ書いてください。説明や番号は不要です。
 
-【専門用語】
-（発表中の難解な専門用語を1行に1つ列挙する）
+--- 発表テキスト ---
+${pdfText.slice(0, 5000)}`,
+      ),
+      ollamaChat(
+        'あなたは学術発表のアシスタントです。必ず日本語で回答してください。',
+        `以下の発表テキストについて、発表者に質問したい内容を5〜8個考えてください。
+各質問は「〜ですか？」「〜でしょうか？」など疑問形で終わらせてください。
+質問のみを1行に1つ書いてください。
 
-【質問】
-（発表者への質問を1行に1つ列挙する）
 質問観点: ${QUESTION_PROMPTS[type]}
-
 発表タイプ: ${type === 'progress' ? '進捗報告' : '抄読'}
 
 --- 発表テキスト ---
-${pdfText.slice(0, 6000)}`,
-    )
-    // gemmaはフォーマット指示を無視するため、マークダウンの構造から直接抽出する
-    // **用語** パターンから専門用語を抽出（重複除去）
-    const boldTerms = [...new Set(
-      [...text.matchAll(/\*\*([^*\n]{2,30})\*\*/g)]
-        .map(m => m[1].replace(/[：:（）()]/g, '').trim())
-        .filter(s => s.length >= 2 && s.length <= 25 && !/^[0-9\s]+$/.test(s))
+${pdfText.slice(0, 5000)}`,
+      ),
+    ])
+
+    // 行ごとに専門用語を抽出（**太字**パターンも対応）
+    const terms = [...new Set(
+      termsText
+        .split('\n')
+        .map(l => l.replace(/^\s*[-*・\d.、]+\s*/, '').replace(/\*\*/g, '').trim())
+        .filter(s => s.length >= 2 && s.length <= 30 && !/^[0-9\s]+$/.test(s))
     )].map(term => ({ term }))
 
-    // 番号付きリストや箇条書きから質問候補を抽出
-    const listLines = text
+    // ？を含む行のみを質問として抽出
+    const questions = questionsText
       .split('\n')
       .map(l => l.replace(/^\s*[-*・\d.]+\s*/, '').replace(/\*\*/g, '').trim())
-      .filter(l => l.length > 10 && l.includes('（') || l.includes('例：') || l.endsWith('。') || l.endsWith('か？'))
+      .filter(l => l.includes('？') || l.includes('?'))
       .slice(0, 8)
 
+    // 各用語の説明を並列取得（最大20件）
+    const topTerms = terms.slice(0, 20)
+    const explanations = await Promise.all(
+      topTerms.map(t => explainTerm(t.term).catch(() => ({ explanation: '', relatedTerms: [] })))
+    )
+    const termsWithExplanation = topTerms.map((t, i) => ({
+      ...t,
+      explanation: explanations[i].explanation,
+      relatedTerms: explanations[i].relatedTerms,
+    }))
+
     return {
-      terms: boldTerms.slice(0, 20),
-      questions: listLines.length > 0 ? listLines : ['発表内容の質問は手動で作成してください'],
+      terms: termsWithExplanation,
+      questions: questions.length > 0 ? questions : ['この発表の主要な手法の選択理由を教えてください。', '結果の解釈における不確実性はどのように扱いましたか？'],
     }
   }
 

@@ -2,8 +2,7 @@
 
 import { useState } from 'react'
 
-type TermResult = { term: string; page?: number; inDb: boolean }
-type TermDetail = { explanation: string; relatedTerms: string[]; source: 'db' | 'ai' }
+type TermResult = { term: string; page?: number; inDb: boolean; explanation?: string; relatedTerms?: string[] }
 
 type Props = { fileId: string; fileName: string }
 
@@ -15,22 +14,10 @@ export default function SidePanel({ fileId, fileName }: Props) {
   const [loading, setLoading] = useState(false)
   const [newTerms, setNewTerms] = useState<TermResult[]>([])
   const [bulkSaving, setBulkSaving] = useState(false)
-  const [expanded, setExpanded] = useState<Record<string, TermDetail | 'loading' | 'error'>>({})
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
-  const toggleTerm = async (term: string) => {
-    if (expanded[term]) {
-      setExpanded(prev => { const next = { ...prev }; delete next[term]; return next })
-      return
-    }
-    setExpanded(prev => ({ ...prev, [term]: 'loading' }))
-    try {
-      const res = await fetch(`/api/lookup?term=${encodeURIComponent(term)}`)
-      const data = await res.json()
-      if (data.error) throw new Error(data.error)
-      setExpanded(prev => ({ ...prev, [term]: { explanation: data.explanation, relatedTerms: data.relatedTerms, source: data.source } }))
-    } catch {
-      setExpanded(prev => ({ ...prev, [term]: 'error' }))
-    }
+  const toggleTerm = (term: string) => {
+    setExpanded(prev => ({ ...prev, [term]: !prev[term] }))
   }
 
   const handleAnalyze = async () => {
@@ -79,40 +66,31 @@ export default function SidePanel({ fileId, fileName }: Props) {
 
       {/* コンテンツ */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
-        {tab === 'terms' && terms.map((t, i) => {
-          const detail = expanded[t.term]
-          return (
-            <div key={i} className="bg-slate-900 rounded-lg border border-slate-800 overflow-hidden">
-              <button
-                type="button"
-                onClick={() => toggleTerm(t.term)}
-                className="w-full p-3 flex justify-between items-center hover:bg-slate-800 transition-colors text-left"
-              >
-                <span className="text-slate-100 text-sm font-medium">{t.term}</span>
-                <div className="flex items-center gap-2">
-                  <span className={`text-xs px-1.5 py-0.5 rounded-full ${t.inDb ? 'bg-green-950 text-green-400' : 'bg-blue-950 text-blue-400'}`}>
-                    {t.inDb ? '📚 DB' : '✨ 新規'}
-                  </span>
-                  <span className="text-slate-500 text-xs">{detail ? '▲' : '▼'}</span>
-                </div>
-              </button>
-              {detail && (
-                <div className="px-3 pb-3 border-t border-slate-800 pt-2">
-                  {detail === 'loading' && <p className="text-slate-400 text-xs animate-pulse">読み込み中...</p>}
-                  {detail === 'error' && <p className="text-red-400 text-xs">取得に失敗しました</p>}
-                  {detail !== 'loading' && detail !== 'error' && (
-                    <>
-                      <p className="text-slate-200 text-xs leading-relaxed">{detail.explanation}</p>
-                      {detail.relatedTerms.length > 0 && (
-                        <p className="text-slate-500 text-xs mt-1">関連: {detail.relatedTerms.join(', ')}</p>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          )
-        })}
+        {tab === 'terms' && terms.map((t, i) => (
+          <div key={i} className="bg-slate-900 rounded-lg border border-slate-800 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => toggleTerm(t.term)}
+              className="w-full p-3 flex justify-between items-center hover:bg-slate-800 transition-colors text-left"
+            >
+              <span className="text-slate-100 text-sm font-medium">{t.term}</span>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs px-1.5 py-0.5 rounded-full ${t.inDb ? 'bg-green-950 text-green-400' : 'bg-blue-950 text-blue-400'}`}>
+                  {t.inDb ? '📚 DB' : '✨ 新規'}
+                </span>
+                {t.explanation && <span className="text-slate-500 text-xs">{expanded[t.term] ? '▲' : '▼'}</span>}
+              </div>
+            </button>
+            {expanded[t.term] && t.explanation && (
+              <div className="px-3 pb-3 border-t border-slate-800 pt-2">
+                <p className="text-slate-200 text-xs leading-relaxed">{t.explanation}</p>
+                {t.relatedTerms && t.relatedTerms.length > 0 && (
+                  <p className="text-slate-500 text-xs mt-1">関連: {t.relatedTerms.join(', ')}</p>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
 
         {tab === 'questions' && questions.map((q, i) => (
           <div key={i} className="bg-slate-900 rounded-lg p-3 border-l-2 border-amber-500">
