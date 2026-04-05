@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 type LookupResult = {
   source: 'db' | 'ai'
@@ -21,13 +21,37 @@ type Props = {
 
 export default function TermPopup({ term, x, y, pdfName, onClose, onSaved }: Props) {
   const [result, setResult] = useState<LookupResult | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const popupRef = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState({ left: x, top: y + 8 })
+
+  useLayoutEffect(() => {
+    const el = popupRef.current
+    if (!el) return
+    const POPUP_W = el.offsetWidth
+    const POPUP_H = el.offsetHeight
+    const container = el.offsetParent as HTMLElement | null
+    const cW = container?.offsetWidth  ?? window.innerWidth
+    const cH = container?.offsetHeight ?? window.innerHeight
+    const left = Math.min(x, Math.max(0, cW - POPUP_W - 8))
+    const top  = y + 8 + POPUP_H > cH ? Math.max(0, y - POPUP_H - 8) : y + 8
+    setPos({ left, top })
+  }, [x, y, result, error])
 
   useEffect(() => {
     setResult(null)
+    setError(null)
     fetch(`/api/lookup?term=${encodeURIComponent(term)}`)
       .then((r) => r.json())
-      .then(setResult)
+      .then((data) => {
+        if (data.error) {
+          setError(data.error)
+        } else {
+          setResult(data)
+        }
+      })
+      .catch(() => setError('通信エラーが発生しました'))
   }, [term])
 
   const handleSave = async () => {
@@ -51,8 +75,9 @@ export default function TermPopup({ term, x, y, pdfName, onClose, onSaved }: Pro
 
   return (
     <div
-      className={`absolute z-50 bg-slate-900 border ${borderColor} rounded-lg p-4 w-72 shadow-xl`}
-      style={{ left: x, top: y + 8 }}
+      ref={popupRef}
+      className={`absolute z-50 bg-slate-900 border ${borderColor} rounded-lg p-4 w-72 max-h-80 overflow-y-auto shadow-xl`}
+      style={{ left: pos.left, top: pos.top }}
     >
       <div className="flex justify-between items-center mb-2">
         <span className={`text-sm font-semibold ${result?.source === 'db' ? 'text-green-400' : 'text-blue-400'}`}>
@@ -63,7 +88,9 @@ export default function TermPopup({ term, x, y, pdfName, onClose, onSaved }: Pro
         </button>
       </div>
 
-      {!result ? (
+      {error ? (
+        <p className="text-red-400 text-xs">{error}</p>
+      ) : !result ? (
         <p className="text-slate-400 text-xs animate-pulse">読み込み中...</p>
       ) : (
         <>

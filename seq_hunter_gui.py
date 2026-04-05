@@ -35,6 +35,7 @@ from seq_hunter import (
     check_sra_toolkit,
     download_via_ebi_ftp,
     download_with_prefetch,
+    fetch_by_accessions,
     search_ddbj,
     search_ncbi_sra,
 )
@@ -70,96 +71,132 @@ class SearchPanel(ctk.CTkFrame):
         self._build()
 
     def _build(self):
+        # スクロール可能な内側フレーム
+        self._inner = ctk.CTkScrollableFrame(self, fg_color="transparent", corner_radius=0)
+        self._inner.pack(fill="both", expand=True)
+        inner = self._inner
         pad = {"padx": 12, "pady": 4}
 
         # タイトル
-        ctk.CTkLabel(self, text="🔬 検索条件",
+        ctk.CTkLabel(inner, text="🔬 検索条件",
                      font=ctk.CTkFont(size=16, weight="bold"),
                      text_color=COLOR_BLUE).pack(anchor="w", padx=14, pady=(14, 6))
 
-        self._sep()
+        self._sep(inner)
 
         # DB
-        self._label("データベース")
+        self._label(inner, "データベース")
         self.db_var = ctk.StringVar(value="両方 (NCBI + DDBJ)")
-        ctk.CTkOptionMenu(self, values=["NCBI SRA", "DDBJ", "両方 (NCBI + DDBJ)"],
+        ctk.CTkOptionMenu(inner, values=["NCBI SRA", "DDBJ", "両方 (NCBI + DDBJ)"],
                           variable=self.db_var,
                           fg_color=COLOR_ACCENT, button_color=COLOR_BLUE).pack(fill="x", **pad)
 
         # 採取環境
-        self._label("採取環境")
+        self._label(inner, "採取環境")
         self.env_var = ctk.StringVar(value="hot spring / 温泉")
-        ctk.CTkOptionMenu(self, values=list(ENV_KEYWORDS.keys()),
+        ctk.CTkOptionMenu(inner, values=list(ENV_KEYWORDS.keys()),
                           variable=self.env_var,
                           fg_color=COLOR_ACCENT, button_color=COLOR_BLUE).pack(fill="x", **pad)
 
         # フォーマット
-        self._label("シーケンスフォーマット")
+        self._label(inner, "シーケンスフォーマット")
         self.fmt_var = ctk.StringVar(value="16S rRNA")
-        ctk.CTkOptionMenu(self, values=list(FORMAT_KEYWORDS.keys()),
+        ctk.CTkOptionMenu(inner, values=list(FORMAT_KEYWORDS.keys()),
                           variable=self.fmt_var,
                           fg_color=COLOR_ACCENT, button_color=COLOR_BLUE).pack(fill="x", **pad)
 
         # シーケンサー
-        self._label("シーケンス機器")
+        self._label(inner, "シーケンス機器")
         self.seq_var = ctk.StringVar(value="指定なし")
-        ctk.CTkOptionMenu(self, values=list(SEQ_METHOD_KEYWORDS.keys()),
+        ctk.CTkOptionMenu(inner, values=list(SEQ_METHOD_KEYWORDS.keys()),
                           variable=self.seq_var,
                           fg_color=COLOR_ACCENT, button_color=COLOR_BLUE).pack(fill="x", **pad)
 
         # 国・地域
-        self._label("採取国・地域 (任意)")
-        self.country_entry = ctk.CTkEntry(self, placeholder_text="例: Japan",
+        self._label(inner, "採取国・地域 (任意)")
+        self.country_entry = ctk.CTkEntry(inner, placeholder_text="例: Japan",
                                           fg_color=COLOR_ACCENT)
         self.country_entry.pack(fill="x", **pad)
 
         # 追加キーワード
-        self._label("追加キーワード (任意)")
-        self.extra_entry = ctk.CTkEntry(self, placeholder_text="例: volcanic",
+        self._label(inner, "追加キーワード (任意)")
+        self.extra_entry = ctk.CTkEntry(inner, placeholder_text="例: volcanic",
                                         fg_color=COLOR_ACCENT)
         self.extra_entry.pack(fill="x", **pad)
 
         # カスタム自由入力欄（その他が選ばれたとき）
-        self._label("カスタム環境/フォーマット (その他の場合)")
-        self.custom_entry = ctk.CTkEntry(self, placeholder_text="例: cave, glacier, ITS2",
+        self._label(inner, "カスタム環境/フォーマット (その他の場合)")
+        self.custom_entry = ctk.CTkEntry(inner, placeholder_text="例: cave, glacier, ITS2",
                                          fg_color=COLOR_ACCENT)
         self.custom_entry.pack(fill="x", **pad)
 
-        self._sep()
+        self._sep(inner)
 
         # 件数
-        self._label("最大取得件数")
+        self._label(inner, "最大取得件数")
         self.limit_var = ctk.StringVar(value="50")
-        ctk.CTkEntry(self, textvariable=self.limit_var,
+        ctk.CTkEntry(inner, textvariable=self.limit_var,
                      fg_color=COLOR_ACCENT).pack(fill="x", **pad)
 
         # メールアドレス
-        self._label("NCBIメールアドレス")
-        self.email_entry = ctk.CTkEntry(self, placeholder_text="your@email.com",
+        self._label(inner, "NCBIメールアドレス")
+        self.email_entry = ctk.CTkEntry(inner, placeholder_text="your@email.com",
                                         fg_color=COLOR_ACCENT)
         self.email_entry.pack(fill="x", **pad)
 
-        self._sep()
+        self._sep(inner)
 
         # 検索ボタン
         self.search_btn = ctk.CTkButton(
-            self, text="🔍  検索実行", height=40,
+            inner, text="🔍  検索実行", height=40,
             fg_color=COLOR_BLUE, hover_color="#1a7de0",
             font=ctk.CTkFont(size=14, weight="bold"),
             command=self._on_click_search,
         )
         self.search_btn.pack(fill="x", padx=12, pady=(8, 4))
 
-    def _label(self, text):
-        ctk.CTkLabel(self, text=text, font=ctk.CTkFont(size=11),
+        self._sep(inner)
+
+        # ── アクセッション番号直接検索 ──────────────────────
+        ctk.CTkLabel(inner, text="🔎 アクセッション番号で検索",
+                     font=ctk.CTkFont(size=13, weight="bold"),
+                     text_color=COLOR_YELLOW).pack(anchor="w", padx=14, pady=(4, 2))
+
+        self._label(inner, "アクセッション番号 (カンマ区切り)")
+        self.accession_entry = ctk.CTkEntry(
+            inner,
+            placeholder_text="例: SRR12345, DRR67890, SRP001234",
+            fg_color=COLOR_ACCENT,
+        )
+        self.accession_entry.pack(fill="x", padx=12, pady=4)
+
+        self.acc_search_btn = ctk.CTkButton(
+            inner, text="🔍  アクセッション検索", height=36,
+            fg_color=COLOR_YELLOW, hover_color="#e0b800",
+            text_color="#1a1a2e",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            command=self._on_click_acc_search,
+        )
+        self.acc_search_btn.pack(fill="x", padx=12, pady=(2, 12))
+
+    def _label(self, parent, text):
+        ctk.CTkLabel(parent, text=text, font=ctk.CTkFont(size=11),
                      text_color=COLOR_DIM).pack(anchor="w", padx=14, pady=(6, 0))
 
-    def _sep(self):
-        ctk.CTkFrame(self, height=1, fg_color=COLOR_ACCENT).pack(fill="x", padx=10, pady=6)
+    def _sep(self, parent):
+        ctk.CTkFrame(parent, height=1, fg_color=COLOR_ACCENT).pack(fill="x", padx=10, pady=6)
 
     def _on_click_search(self):
         params = self.get_params()
         self.on_search(params)
+
+    def _on_click_acc_search(self):
+        raw = self.accession_entry.get().strip()
+        if not raw:
+            return
+        accessions = [a.strip() for a in raw.replace("、", ",").split(",") if a.strip()]
+        email = self.email_entry.get().strip() or "user@example.com"
+        self.on_search({"mode": "accession", "accessions": accessions, "email": email})
 
     def get_params(self) -> dict:
         env_key = self.env_var.get()
@@ -197,6 +234,10 @@ class SearchPanel(ctk.CTkFrame):
         self.search_btn.configure(
             state="disabled" if state else "normal",
             text="検索中..." if state else "🔍  検索実行",
+        )
+        self.acc_search_btn.configure(
+            state="disabled" if state else "normal",
+            text="検索中..." if state else "🔍  アクセッション検索",
         )
 
 
@@ -467,10 +508,29 @@ class DownloadPanel(ctk.CTkFrame):
         self.status_label = ctk.CTkLabel(self, text="",
                                          text_color=COLOR_DIM,
                                          font=ctk.CTkFont(size=11))
-        self.status_label.pack(anchor="w", padx=14, pady=(0, 4))
+        self.status_label.pack(anchor="w", padx=14, pady=(0, 2))
+
+        # ファイル別プログレス
+        file_prog_frame = ctk.CTkFrame(self, fg_color="transparent")
+        file_prog_frame.pack(fill="x", padx=12, pady=(0, 2))
+        self.file_label = ctk.CTkLabel(file_prog_frame, text="",
+                                       text_color=COLOR_DIM,
+                                       font=ctk.CTkFont(family="Consolas", size=10),
+                                       anchor="w")
+        self.file_label.pack(side="left", fill="x", expand=True)
+        self.file_size_label = ctk.CTkLabel(file_prog_frame, text="",
+                                            text_color=COLOR_DIM,
+                                            font=ctk.CTkFont(family="Consolas", size=10),
+                                            width=100, anchor="e")
+        self.file_size_label.pack(side="right")
+        self.file_progress = ctk.CTkProgressBar(self, height=8,
+                                                progress_color=COLOR_BLUE,
+                                                fg_color=COLOR_ACCENT)
+        self.file_progress.pack(fill="x", padx=12, pady=(0, 4))
+        self.file_progress.set(0)
 
         # ログエリア
-        self.log = ctk.CTkTextbox(self, height=130, fg_color=COLOR_BG,
+        self.log = ctk.CTkTextbox(self, height=110, fg_color=COLOR_BG,
                                    text_color=COLOR_TEXT,
                                    font=ctk.CTkFont(family="Consolas", size=11))
         self.log.pack(fill="x", padx=12, pady=(0, 10))
@@ -490,6 +550,14 @@ class DownloadPanel(ctk.CTkFrame):
         self.progress.set(value)
         if text:
             self.status_label.configure(text=text)
+
+    def set_file_progress(self, fname: str, downloaded: int, total: int):
+        ratio = downloaded / total if total else 0
+        self.file_progress.set(ratio)
+        dl_mb = downloaded / 1e6
+        tot_mb = total / 1e6
+        self.file_label.configure(text=fname)
+        self.file_size_label.configure(text=f"{dl_mb:.1f} / {tot_mb:.1f} MB")
 
     def _start_download(self):
         selected = self.get_selected()
@@ -534,11 +602,16 @@ class DownloadPanel(ctk.CTkFrame):
                 def gui_log(msg, _idx=i):
                     self.after(0, self.log_write, f"    {msg}")
 
+                def gui_progress(fname, downloaded, total):
+                    self.after(0, self.set_file_progress, fname, downloaded, total)
+
                 try:
                     if use_toolkit:
                         ok = download_with_prefetch(run_acc, run_dir)
                     else:
-                        ok = download_via_ebi_ftp(run_acc, run_dir, log_fn=gui_log)
+                        ok = download_via_ebi_ftp(run_acc, run_dir,
+                                                  log_fn=gui_log,
+                                                  progress_fn=gui_progress)
                 except Exception as e:
                     ok = False
                     self.after(0, self.log_write, f"    エラー: {e}")
@@ -567,8 +640,9 @@ class DownloadPanel(ctk.CTkFrame):
             self.after(0, self.log_write,
                        f"\n✅ 完了: {len(ok_list)}/{n}  "
                        f"メタデータ → {meta_path}")
-            self.after(0, self.dl_btn.configure,
-                       {"state": "normal", "text": "⬇  ダウンロード開始"})
+            self.after(0, lambda: self.dl_btn.configure(
+                state="normal", text="⬇  ダウンロード開始"
+            ))
 
             if fail_list:
                 self.after(0, messagebox.showwarning,
@@ -633,25 +707,35 @@ class SeqHunterApp(ctk.CTk):
         def worker():
             all_results = []
 
-            if params["db"] in ("NCBI SRA", "両方 (NCBI + DDBJ)"):
-                query = build_ncbi_query(
-                    params["env_terms"], params["fmt_terms"],
-                    params["country"], params["extra_query"]
-                )
+            if params.get("mode") == "accession":
+                # ── アクセッション番号直接検索 ──
                 try:
-                    ncbi = search_ncbi_sra(query, params["limit"], params["email"])
-                    all_results.extend(ncbi)
+                    all_results = fetch_by_accessions(
+                        params["accessions"], params["email"]
+                    )
                 except Exception as e:
-                    self.after(0, messagebox.showerror, "NCBI エラー", str(e))
+                    self.after(0, messagebox.showerror, "検索エラー", str(e))
+            else:
+                # ── キーワード検索 ──
+                if params["db"] in ("NCBI SRA", "両方 (NCBI + DDBJ)"):
+                    query = build_ncbi_query(
+                        params["env_terms"], params["fmt_terms"],
+                        params["country"], params["extra_query"]
+                    )
+                    try:
+                        ncbi = search_ncbi_sra(query, params["limit"], params["email"])
+                        all_results.extend(ncbi)
+                    except Exception as e:
+                        self.after(0, messagebox.showerror, "NCBI エラー", str(e))
 
-            if params["db"] in ("DDBJ", "両方 (NCBI + DDBJ)"):
-                ddbj_terms = (params["env_terms"] + params["fmt_terms"] +
-                              ([params["country"]] if params["country"] else []))
-                try:
-                    ddbj = search_ddbj(ddbj_terms, params["limit"])
-                    all_results.extend(ddbj)
-                except Exception as e:
-                    self.after(0, messagebox.showerror, "DDBJ エラー", str(e))
+                if params["db"] in ("DDBJ", "両方 (NCBI + DDBJ)"):
+                    ddbj_terms = (params["env_terms"] + params["fmt_terms"] +
+                                  ([params["country"]] if params["country"] else []))
+                    try:
+                        ddbj = search_ddbj(ddbj_terms, params["limit"])
+                        all_results.extend(ddbj)
+                    except Exception as e:
+                        self.after(0, messagebox.showerror, "DDBJ エラー", str(e))
 
             self.after(0, self.results_panel.load_results, all_results)
             self.after(0, self.search_panel.set_searching, False)

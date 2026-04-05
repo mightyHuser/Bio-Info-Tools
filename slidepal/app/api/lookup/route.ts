@@ -17,12 +17,20 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  const aiResult = await explainTerm(term)
-  return NextResponse.json({
-    source: 'ai' as const,
-    term,
-    explanation: aiResult.explanation,
-    relatedTerms: aiResult.relatedTerms,
-    occurrenceCount: 0,
-  })
+  try {
+    const aiResult = await explainTerm(term)
+    return NextResponse.json({
+      source: 'ai' as const,
+      term,
+      explanation: aiResult.explanation,
+      relatedTerms: aiResult.relatedTerms,
+      occurrenceCount: 0,
+    })
+  } catch (err) {
+    console.error('[lookup] AI error:', err)
+    return NextResponse.json(
+      { error: 'AI による説明の取得に失敗しました' },
+      { status: 500 }
+    )
+  }
 }
