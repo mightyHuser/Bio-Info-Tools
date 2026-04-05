@@ -22,16 +22,22 @@ export default function SidePanel({ fileId, fileName }: Props) {
 
   const handleAnalyze = async () => {
     setLoading(true)
-    const res = await fetch('/api/analyze', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fileId, type }),
-    })
-    const data = await res.json()
-    setTerms(data.terms)
-    setQuestions(data.questions)
-    setNewTerms(data.terms.filter((t: TermResult) => !t.inDb))
-    setLoading(false)
+    try {
+      const res = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileId, type }),
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      setTerms(data.terms)
+      setQuestions(data.questions)
+      setNewTerms(data.terms.filter((t: TermResult) => !t.inDb))
+    } catch (e) {
+      alert(`解析エラー: ${e instanceof Error ? e.message : '不明なエラー'}`)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleBulkSave = async () => {
